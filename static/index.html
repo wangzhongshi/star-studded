@@ -1,0 +1,973 @@
+<!--# Copyright 2026 王柄屹-->
+<!--#-->
+<!--# Licensed under the Apache License, Version 2.0 (the "License");-->
+<!--# you may not use this file except in compliance with the License.-->
+<!--# You may obtain a copy of the License at-->
+<!--#-->
+<!--#     http://www.apache.org/licenses/LICENSE-2.0-->
+<!--#-->
+<!--# Unless required by applicable law or agreed to in writing, software-->
+<!--# distributed under the License is distributed on an "AS IS" BASIS,-->
+<!--# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.-->
+<!--# See the License for the specific language governing permissions and-->
+<!--# limitations under the License.-->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>众星云集 - 让想象变成画面</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg-color: #F5F5F7;
+            --card-bg: #FFFFFF;
+            --user-bubble: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --star-bubble: #FFFFFF;
+            --text-primary: #1D1D1F;
+            --text-secondary: #86868B;
+            --border-color: #E5E5EA;
+            --shadow: 0 2px 12px rgba(0,0,0,0.08);
+            --shadow-hover: 0 4px 20px rgba(0,0,0,0.12);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+            background: var(--bg-color);
+            min-height: 100vh;
+            color: var(--text-primary);
+            overflow-x: hidden;
+            padding-bottom: 80px;
+        }
+
+        /* 顶部标题 */
+        .header {
+            background: var(--card-bg);
+            padding: 16px 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: 2px;
+        }
+
+        .header p {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        /* 主容器 */
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* 对话区域 */
+        .chat-area {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        /* 消息气泡基础 */
+        .message {
+            display: flex;
+            align-items: flex-end;
+            gap: 10px;
+            max-width: 85%;
+            animation: fadeInUp 0.3s ease;
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* 星星消息（左对齐） */
+        .message.star { align-self: flex-start; }
+
+        .star-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            animation: avatarPop 0.4s ease;
+        }
+
+        @keyframes avatarPop {
+            0% { transform: scale(0); }
+            60% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+
+        .star-avatar.working {
+            animation: avatarBounce 1s infinite;
+        }
+
+        @keyframes avatarBounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-4px); }
+        }
+
+        .star-content {
+            background: var(--star-bubble);
+            border-radius: 18px;
+            border-bottom-left-radius: 4px;
+            padding: 12px 16px;
+            box-shadow: var(--shadow);
+            position: relative;
+        }
+
+        .star-name {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+            font-weight: 500;
+        }
+
+        .star-text {
+            font-size: 15px;
+            line-height: 1.6;
+            color: var(--text-primary);
+        }
+
+        /* 用户消息（右对齐） */
+        .message.user {
+            align-self: flex-end;
+            flex-direction: row-reverse;
+        }
+
+        .user-bubble {
+            background: var(--user-bubble);
+            color: white;
+            border-radius: 18px;
+            border-bottom-right-radius: 4px;
+            padding: 12px 16px;
+            box-shadow: var(--shadow);
+            font-size: 15px;
+            line-height: 1.6;
+        }
+
+        /* 用户图片 */
+        .user-bubble img {
+            max-width: 200px;
+            border-radius: 12px;
+            display: block;
+        }
+
+        /* 打字机动画 */
+        .typing-indicator {
+            display: flex;
+            gap: 4px;
+            padding: 8px 0;
+        }
+
+        .typing-indicator span {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-secondary);
+            opacity: 0.4;
+            animation: typingBounce 1.4s infinite ease-in-out both;
+        }
+
+        .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes typingBounce {
+            0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+            40% { transform: scale(1); opacity: 1; }
+        }
+
+        /* 图片结果 */
+        .image-result {
+            align-self: center;
+            width: 100%;
+            max-width: 512px;
+            background: var(--card-bg);
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: var(--shadow-hover);
+            animation: fadeInUp 0.5s ease;
+        }
+
+        .image-result img {
+            width: 100%;
+            display: block;
+        }
+
+        .image-meta {
+            padding: 16px;
+        }
+
+        .image-meta h4 {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .image-meta .prompt-text {
+            font-size: 13px;
+            color: var(--text-primary);
+            line-height: 1.5;
+            background: var(--bg-color);
+            padding: 10px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+        }
+
+        /* 追问区域 */
+        .clarify-box {
+            align-self: flex-start;
+            background: linear-gradient(135deg, #FFF9E6 0%, #FFF3CD 100%);
+            border: 1px solid #FFE082;
+            border-radius: 18px;
+            border-bottom-left-radius: 4px;
+            padding: 16px;
+            max-width: 85%;
+            animation: fadeInUp 0.3s ease;
+        }
+
+        .clarify-box .question {
+            font-size: 15px;
+            color: #856404;
+            margin-bottom: 12px;
+            line-height: 1.6;
+        }
+
+        .clarify-box .hint {
+            font-size: 12px;
+            color: #B8860B;
+            margin-bottom: 12px;
+        }
+
+        .clarify-input-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        .clarify-input-group input {
+            flex: 1;
+            padding: 10px 14px;
+            border: 1px solid #FFE082;
+            border-radius: 12px;
+            background: white;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.3s;
+        }
+
+        .clarify-input-group input:focus {
+            border-color: #FFB800;
+            box-shadow: 0 0 0 3px rgba(255, 184, 0, 0.1);
+        }
+
+        .clarify-input-group button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #FFB800 0%, #FF8C00 100%);
+            color: white;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+
+        .clarify-input-group button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(255, 184, 0, 0.3);
+        }
+
+        /* 增量更新提示 */
+        .continue-hint {
+            text-align: center;
+            padding: 12px;
+            color: var(--text-secondary);
+            font-size: 13px;
+            animation: fadeInUp 0.3s ease;
+        }
+
+        .continue-hint span {
+            color: #667eea;
+            cursor: pointer;
+            text-decoration: underline;
+            margin: 0 2px;
+        }
+
+        /* 底部输入区 */
+        .input-area {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: var(--card-bg);
+            border-top: 1px solid var(--border-color);
+            padding: 12px 20px;
+            padding-bottom: calc(12px + env(safe-area-inset-bottom));
+            z-index: 100;
+        }
+
+        .input-wrapper {
+            max-width: 800px;
+            margin: 0 auto;
+            display: flex;
+            align-items: flex-end;
+            gap: 10px;
+        }
+
+        .input-wrapper textarea {
+            flex: 1;
+            padding: 12px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            background: var(--bg-color);
+            font-size: 15px;
+            line-height: 1.5;
+            resize: none;
+            outline: none;
+            transition: all 0.3s;
+            max-height: 120px;
+            font-family: inherit;
+        }
+
+        .input-wrapper textarea:focus {
+            border-color: #667eea;
+            background: var(--card-bg);
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .input-actions {
+            display: flex;
+            gap: 8px;
+            align-items: flex-end;
+        }
+
+        .upload-btn {
+            width: 44px;
+            height: 44px;
+            border: none;
+            border-radius: 50%;
+            background: var(--bg-color);
+            color: var(--text-secondary);
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+            flex-shrink: 0;
+            border: 1px solid var(--border-color);
+        }
+
+        .upload-btn:hover {
+            background: rgba(102, 126, 234, 0.1);
+            color: #667eea;
+            border-color: #667eea;
+        }
+
+        .upload-btn.has-image {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: transparent;
+        }
+
+        .send-btn {
+            width: 44px;
+            height: 44px;
+            border: none;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+            flex-shrink: 0;
+        }
+
+        .send-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .send-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* 图片预览（显示在输入框上方，对话流中） */
+        .image-preview-bar {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            background: var(--bg-color);
+            border-radius: 12px;
+            margin-bottom: 8px;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+            animation: fadeInUp 0.2s ease;
+        }
+
+        .image-preview-bar.show {
+            display: flex;
+        }
+
+        .image-preview-bar img {
+            width: 48px;
+            height: 48px;
+            object-fit: cover;
+            border-radius: 8px;
+        }
+
+        .image-preview-bar .preview-name {
+            font-size: 13px;
+            color: var(--text-secondary);
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .image-preview-bar .remove-btn {
+            color: #ff4444;
+            cursor: pointer;
+            font-size: 16px;
+            padding: 4px;
+        }
+
+        /* 进度条（顶部） */
+        .top-progress {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            transition: width 0.5s ease;
+            z-index: 101;
+        }
+
+        /* 错误提示 */
+        .error-toast {
+            position: fixed;
+            top: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #FF4444;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-size: 14px;
+            box-shadow: 0 4px 20px rgba(255, 68, 68, 0.3);
+            animation: fadeInDown 0.3s ease;
+            z-index: 200;
+        }
+
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+            to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+
+        /* 响应式 */
+        @media (max-width: 600px) {
+            .container { padding: 12px; }
+            .message { max-width: 90%; }
+            .header h1 { font-size: 18px; }
+            .input-wrapper textarea { font-size: 16px; }
+        }
+
+        /* 星星角色颜色 */
+        .star-scheduler { background: linear-gradient(135deg, #FFE082, #FFB800); }
+        .star-vision { background: linear-gradient(135deg, #81D4FA, #00D4FF); }
+        .star-style { background: linear-gradient(135deg, #F48FB1, #FF6B9D); }
+        .star-mood { background: linear-gradient(135deg, #CE93D8, #9B59B6); }
+        .star-fusion { background: linear-gradient(135deg, #EF9A9A, #E74C3C); }
+        .star-selector { background: linear-gradient(135deg, #A5D6A7, #2ECC71); }
+        .star-prompt_engineer { background: linear-gradient(135deg, #90CAF9, #3498DB); }
+        .star-auditor { background: linear-gradient(135deg, #FFCC80, #E67E22); }
+        .star-generator { background: linear-gradient(135deg, #80CBC4, #1ABC9C); }
+        .star-system { background: linear-gradient(135deg, #B0BEC5, #78909C); }
+        .star-experts { background: linear-gradient(135deg, #E0E0E0, #BDBDBD); }
+    </style>
+<base target="_blank">
+</head>
+<body>
+    <div class="top-progress" id="topProgress" style="width: 0%"></div>
+
+    <div class="header">
+        <h1>众星云集</h1>
+        <p>让每一个人都可以把心里的想法变成实实在在的图片</p>
+    </div>
+
+    <div class="container">
+        <div class="chat-area" id="chatArea"></div>
+    </div>
+
+    <!-- 图片预览条（在对话流和输入区之间） -->
+    <div class="image-preview-bar" id="imagePreviewBar">
+        <img id="previewImg" src="" alt="预览">
+        <span class="preview-name" id="previewName"></span>
+        <span class="remove-btn" onclick="removeImage()">✕</span>
+    </div>
+
+    <!-- 底部固定输入区 -->
+    <div class="input-area">
+        <div class="input-wrapper">
+            <textarea id="userInput" placeholder="描述你想要的画面，例如：给我家猫画个赛博朋克头像..." rows="1"></textarea>
+            <div class="input-actions">
+                <button class="upload-btn" id="uploadBtn" onclick="triggerUpload()" title="上传图片">📷</button>
+                <button class="send-btn" id="sendBtn" onclick="sendMessage()">↑</button>
+            </div>
+        </div>
+    </div>
+
+    <input type="file" id="fileInput" accept="image/*" style="display:none">
+
+    <script>
+        // ============ 全局状态 ============
+        let currentSessionId = null;
+        let currentClarificationRound = 0;
+        let isGenerating = false;
+        let currentImagePath = null;
+        let currentImagePreview = null;
+        let currentFileName = null;
+        const typingMessages = {};
+
+        // ============ 初始化 ============
+        function init() {
+            const fileInput = document.getElementById('fileInput');
+            const userInput = document.getElementById('userInput');
+
+            // 文件选择
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files && e.target.files[0]) {
+                    handleFileUpload(e.target.files[0]);
+                }
+            });
+
+            // 输入框回车发送
+            userInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+
+            // 自动调整输入框高度
+            userInput.addEventListener('input', () => {
+                userInput.style.height = 'auto';
+                userInput.style.height = Math.min(userInput.scrollHeight, 120) + 'px';
+            });
+
+            // 欢迎消息
+            addStarMessage({
+                star_id: 'scheduler',
+                star_name: '小调',
+                emoji: '⭐',
+                color: '#FFB800',
+                personality: '热情活泼的组织者',
+                message: '你好呀！我是小调 ✨ 点击 📷 上传图片，或直接描述你想要的画面，我来召集星星们帮你创作！',
+                mood: 'happy'
+            }, false);
+        }
+
+        // ============ 上传触发 ============
+        function triggerUpload() {
+            document.getElementById('fileInput').click();
+        }
+
+        // ============ 文件上传 ============
+        async function handleFileUpload(file) {
+            const formData = new FormData();
+            formData.append('image', file);
+
+            try {
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    currentImagePath = data.image_path;
+                    currentFileName = file.name;
+                    showImagePreview(file);
+                } else {
+                    showError(data.error || '上传失败');
+                }
+            } catch (e) {
+                showError('上传失败：' + e.message);
+            }
+        }
+
+        function showImagePreview(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                currentImagePreview = e.target.result;
+                const bar = document.getElementById('imagePreviewBar');
+                const img = document.getElementById('previewImg');
+                const name = document.getElementById('previewName');
+                const btn = document.getElementById('uploadBtn');
+
+                img.src = e.target.result;
+                name.textContent = file.name;
+                bar.classList.add('show');
+                btn.classList.add('has-image');
+                btn.textContent = '✓';
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function removeImage() {
+            currentImagePath = null;
+            currentImagePreview = null;
+            currentFileName = null;
+
+            const bar = document.getElementById('imagePreviewBar');
+            const btn = document.getElementById('uploadBtn');
+
+            bar.classList.remove('show');
+            document.getElementById('previewImg').src = '';
+            document.getElementById('previewName').textContent = '';
+            btn.classList.remove('has-image');
+            btn.textContent = '📷';
+            document.getElementById('fileInput').value = '';
+        }
+
+        // ============ 消息渲染 ============
+        function addStarMessage(data, isTyping) {
+            const chatArea = document.getElementById('chatArea');
+            const starId = data.star_id || 'scheduler';
+            const avatarClass = `star-${starId}`;
+
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'message star';
+            msgDiv.id = `msg-${starId}-${Date.now()}`;
+
+            const content = isTyping
+                ? `<div class="typing-indicator"><span></span><span></span><span></span></div>`
+                : `<div class="star-text">${escapeHtml(data.message || '')}</div>`;
+
+            msgDiv.innerHTML = `
+                <div class="star-avatar ${isTyping ? 'working' : ''} ${avatarClass}">${data.emoji || '⭐'}</div>
+                <div class="star-content">
+                    <div class="star-name">${data.star_name || '星星'} · ${data.personality || ''}</div>
+                    ${content}
+                </div>
+            `;
+
+            chatArea.appendChild(msgDiv);
+            scrollToBottom();
+            return msgDiv.id;
+        }
+
+        function updateStarMessage(msgId, data) {
+            const msgDiv = document.getElementById(msgId);
+            if (!msgDiv) return;
+
+            const avatar = msgDiv.querySelector('.star-avatar');
+            const content = msgDiv.querySelector('.star-content');
+
+            if (avatar) {
+                avatar.classList.remove('working');
+            }
+            if (content) {
+                content.innerHTML = `
+                    <div class="star-name">${data.star_name || '星星'} · ${data.personality || ''}</div>
+                    <div class="star-text">${escapeHtml(data.message || '')}</div>
+                `;
+            }
+        }
+
+        function addUserMessage(text) {
+            const chatArea = document.getElementById('chatArea');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'message user';
+
+            let content = escapeHtml(text);
+            if (currentImagePreview) {
+                content = `<img src="${currentImagePreview}" alt="上传图片"><br>${content}`;
+            }
+
+            msgDiv.innerHTML = `<div class="user-bubble">${content}</div>`;
+            chatArea.appendChild(msgDiv);
+            scrollToBottom();
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function scrollToBottom() {
+            window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        }
+
+        // ============ 发送消息 ============
+        async function sendMessage() {
+            const userInput = document.getElementById('userInput');
+            const btn = document.getElementById('sendBtn');
+            const text = userInput.value.trim();
+
+            if (!text || isGenerating) return;
+
+            // 新会话才生成 sessionId
+            if (!currentSessionId) {
+                currentSessionId = 'web_' + Date.now();
+                currentClarificationRound = 0;
+            }
+
+            addUserMessage(text);
+            userInput.value = '';
+            userInput.style.height = 'auto';
+            isGenerating = true;
+            btn.disabled = true;
+
+            await startGenerate(text);
+        }
+
+        async function startGenerate(userInput) {
+            const btn = document.getElementById('sendBtn');
+            const imagePath = currentImagePath;
+
+            try {
+                const response = await fetch('/api/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        user_input: userInput,
+                        session_id: currentSessionId,
+                        image_path: imagePath
+                    })
+                });
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+
+                        try {
+                            const data = JSON.parse(line.slice(6));
+                            handleEvent(data);
+                        } catch (e) {
+                            console.error('Parse error:', e);
+                        }
+                    }
+                }
+            } catch (error) {
+                showError('连接失败：' + error.message);
+                addStarMessage({
+                    star_id: 'system', star_name: '系统', emoji: '⚠️',
+                    message: '连接出了点问题，请重试...'
+                }, false);
+            } finally {
+                isGenerating = false;
+                btn.disabled = false;
+                updateProgress(0);
+            }
+        }
+
+        // ============ 事件处理 ============
+        function handleEvent(data) {
+            switch (data.type) {
+                case 'user_message':
+                    break;
+
+                case 'star_speak':
+                    const starId = data.star_id || 'scheduler';
+                    if (data.is_typing) {
+                        typingMessages[starId] = addStarMessage(data, true);
+                    } else {
+                        if (typingMessages[starId]) {
+                            updateStarMessage(typingMessages[starId], data);
+                            delete typingMessages[starId];
+                        } else {
+                            addStarMessage(data, false);
+                        }
+                    }
+                    break;
+
+                case 'progress':
+                    updateProgress(data.percentage);
+                    break;
+
+                case 'result':
+                    handleResult(data);
+                    break;
+            }
+        }
+
+        function handleResult(data) {
+            const { image_url, error, questions, prompt, meta, mode, clarification_round, max_clarification_rounds } = data;
+
+            if (error) {
+                showError(error);
+                addStarMessage({
+                    star_id: 'system', star_name: '系统', emoji: '⚠️',
+                    message: '生成失败了... ' + error
+                }, false);
+                currentSessionId = null;
+                return;
+            }
+
+            if (image_url) {
+                showImageResult(image_url, prompt, meta);
+                addStarMessage({
+                    star_id: 'generator', star_name: '小画', emoji: '🖼️',
+                    message: '画好啦！如果你还想调整，随时告诉我～'
+                }, false);
+                showContinueHint();
+                currentSessionId = null;
+                currentClarificationRound = 0;
+                removeImage();
+                return;
+            }
+
+            if (questions && questions.length > 0) {
+                currentClarificationRound = clarification_round || currentClarificationRound + 1;
+                showClarifyBox(questions[0], currentClarificationRound, max_clarification_rounds || 6);
+            }
+        }
+
+        // ============ 结果展示 ============
+        function showImageResult(imageUrl, prompt, meta) {
+            const chatArea = document.getElementById('chatArea');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = 'image-result';
+
+            let metaHtml = '';
+            if (meta && typeof meta === 'object') {
+                metaHtml = Object.entries(meta).map(([k, v]) => {
+                    return `<div style="margin-bottom:4px;"><strong>${escapeHtml(k)}:</strong> ${escapeHtml(String(v))}</div>`;
+                }).join('');
+            }
+
+            resultDiv.innerHTML = `
+                <img src="${escapeHtml(imageUrl)}" alt="生成结果" onload="scrollToBottom()">
+                <div class="image-meta">
+                    <h4>📝 提示词详情</h4>
+                    <div class="prompt-text">${escapeHtml(prompt || '无')}</div>
+                    ${metaHtml ? `<h4 style="margin-top:12px;">📊 参数</h4>${metaHtml}` : ''}
+                </div>
+            `;
+
+            chatArea.appendChild(resultDiv);
+            scrollToBottom();
+        }
+
+        function showClarifyBox(question, round, maxRounds) {
+            const chatArea = document.getElementById('chatArea');
+            const box = document.createElement('div');
+            box.className = 'clarify-box';
+            box.id = 'clarify-box';
+
+            box.innerHTML = `
+                <div class="question">${escapeHtml(question)}</div>
+                <div class="hint">第 ${round}/${maxRounds} 轮追问，还剩 ${maxRounds - round} 次补充机会</div>
+                <div class="clarify-input-group">
+                    <input type="text" id="clarifyInput" placeholder="补充一下..."
+                        onkeydown="if(event.key==='Enter')submitClarification()">
+                    <button onclick="submitClarification()">补充</button>
+                </div>
+            `;
+
+            chatArea.appendChild(box);
+            scrollToBottom();
+
+            setTimeout(() => {
+                const input = document.getElementById('clarifyInput');
+                if (input) input.focus();
+            }, 100);
+        }
+
+        function submitClarification() {
+            const input = document.getElementById('clarifyInput');
+            if (!input) return;
+
+            const text = input.value.trim();
+            if (!text) return;
+
+            const box = document.getElementById('clarify-box');
+            if (box) box.remove();
+
+            addUserMessage(text);
+            startGenerate(text);
+        }
+
+        function showContinueHint() {
+            const chatArea = document.getElementById('chatArea');
+            const hint = document.createElement('div');
+            hint.className = 'continue-hint';
+            hint.innerHTML = `
+                你可以继续调整，比如：
+                <span onclick="quickSend('再酷一点')">再酷一点</span>
+                <span onclick="quickSend('换成动漫风')">换成动漫风</span>
+                <span onclick="quickSend('像电影海报')">像电影海报</span>
+            `;
+            chatArea.appendChild(hint);
+            scrollToBottom();
+        }
+
+        function quickSend(text) {
+            const userInput = document.getElementById('userInput');
+            userInput.value = text;
+            sendMessage();
+        }
+
+        // ============ 工具函数 ============
+        function updateProgress(percentage) {
+            const bar = document.getElementById('topProgress');
+            if (bar) bar.style.width = percentage + '%';
+        }
+
+        function showError(message) {
+            const existing = document.querySelector('.error-toast');
+            if (existing) existing.remove();
+
+            const toast = document.createElement('div');
+            toast.className = 'error-toast';
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.remove();
+            }, 4000);
+        }
+
+        // ============ 启动 ============
+        init();
+    </script>
+</body>
+</html>

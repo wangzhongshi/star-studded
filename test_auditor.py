@@ -1,9 +1,22 @@
+# Copyright 2026 王柄屹
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-from SrcLangChain.services.prompt_auditor import PromptAuditor, AuditResult
+from src.services.prompt_auditor import PromptAuditor, AuditResult
 
 
 def test_auditor():
@@ -63,7 +76,7 @@ def test_workflow_with_auditor():
     print("测试: Workflow 集成 PromptAuditor")
     print("=" * 60)
 
-    from SrcLangChain.graph.workflow import app
+    from src.graph.workflow import app
 
     # 正常提示词
     print("\n--- 测试1: 正常提示词 ---")
@@ -86,7 +99,7 @@ def test_workflow_with_auditor():
     }
 
     # 这里只测试 auditor 节点，不走完整 workflow
-    from SrcLangChain.services.prompt_auditor import auditor
+    from src.services.prompt_auditor import auditor
 
     # 模拟 PromptEngineer 输出
     test_prompt = "猫，赛博朋克风格，霓虹灯光，35mm焦段，光圈f/1.4"

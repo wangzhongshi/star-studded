@@ -1,3 +1,16 @@
+# Copyright 2026 王柄屹
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import os
 import sys
 
@@ -8,7 +21,7 @@ os.environ["ARK_API_KEY"] = "your-api-key"
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-from SrcLangChain.graph.workflow import app, get_or_create_memory
+from src.graph.workflow import app, get_or_create_memory
 
 
 def create_initial_state(user_input: str, session_id: str = "default") -> dict:
@@ -194,8 +207,8 @@ def test_prompt_engineer_vs_fallback():
     print("测试6: PromptEngineer vs Fallback 对比")
     print("=" * 60)
 
-    from SrcLangChain.tools.generators.seedream import SeedreamGenerator
-    from SrcLangChain.models.intent import IntentRepresentation, Subject, Style, Output, Constraints
+    from src.tools.generators.seedream import SeedreamGenerator
+    from src.models.intent import IntentRepresentation, Subject, Style, Output, Constraints
 
     # 构造一个意图
     intent = IntentRepresentation(
@@ -246,7 +259,7 @@ def test_style_coverage():
     print("测试7: 风格映射表覆盖度")
     print("=" * 60)
 
-    from SrcLangChain.agents.experts.prompt_engineer import PromptEngineer
+    from src.agents.experts.prompt_engineer import PromptEngineer
 
     engineer = PromptEngineer()
     styles = list(engineer.style_map.keys())
@@ -275,8 +288,8 @@ def test_prompt_engineer_direct():
     print("测试8: PromptEngineer 单元测试")
     print("=" * 60)
 
-    from SrcLangChain.agents.experts.prompt_engineer import PromptEngineer
-    from SrcLangChain.models.intent import IntentRepresentation, Subject, Style, Output, Constraints
+    from src.agents.experts.prompt_engineer import PromptEngineer
+    from src.models.intent import IntentRepresentation, Subject, Style, Output, Constraints
 
     engineer = PromptEngineer()
 

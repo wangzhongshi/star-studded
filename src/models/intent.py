@@ -14,6 +14,7 @@
 from dataclasses import dataclass, field
 from typing import List, Optional
 from enum import Enum
+import json
 
 
 class IntentMode(Enum):
@@ -37,7 +38,7 @@ class Style:
     genre: str = ""
     references: List[str] = field(default_factory=list)
     mood: str = ""
-    intensity: float = 0.5  # 0-1
+    intensity: float = 0.5
 
 
 @dataclass
@@ -86,3 +87,41 @@ class IntentRepresentation:
                 "avoid": self.constraints.avoid or []
             }
         }
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict(), ensure_ascii=False)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "IntentRepresentation":
+        mode_map = {
+            "style_transfer": IntentMode.STYLE_TRANSFER,
+            "element_swap": IntentMode.ELEMENT_SWAP,
+            "mood_shift": IntentMode.MOOD_SHIFT,
+            "replicate": IntentMode.REPLICATE,
+            "composite": IntentMode.COMPOSITE
+        }
+
+        return cls(
+            mode=mode_map.get(data.get("mode", "style_transfer"), IntentMode.STYLE_TRANSFER),
+            subject=Subject(
+                entity=data.get("subject", {}).get("entity", ""),
+                attributes=data.get("subject", {}).get("attributes", []) or [],
+                pose=data.get("subject", {}).get("pose", ""),
+                expression=data.get("subject", {}).get("expression", "")
+            ),
+            style=Style(
+                genre=data.get("style", {}).get("genre", ""),
+                references=data.get("style", {}).get("references", []) or [],
+                mood=data.get("style", {}).get("mood", ""),
+                intensity=data.get("style", {}).get("intensity", 0.5)
+            ),
+            output=Output(
+                format=data.get("output", {}).get("format", "image"),
+                aspect_ratio=data.get("output", {}).get("aspect_ratio", "1:1"),
+                quality=data.get("output", {}).get("quality", "high")
+            ),
+            constraints=Constraints(
+                must_include=data.get("constraints", {}).get("must_include", []) or [],
+                avoid=data.get("constraints", {}).get("avoid", []) or []
+            )
+        )
