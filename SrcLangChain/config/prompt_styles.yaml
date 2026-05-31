@@ -1,0 +1,202 @@
+# 风格 → 摄影参数映射表
+# 用于 PromptEngineer 自动推断专业级提示词参数
+
+styles:
+  赛博朋克:
+    photo:
+      focal_length: "35mm"
+      aperture: "f/1.4"
+      color_temperature: 5600
+      film_grain: null
+    lighting:
+      direction: "霓虹侧光"
+      quality: "硬"
+      key_light: "霓虹招牌"
+      fill_light: "环境反射光"
+      rim_light: "蓝色轮廓光"
+      atmosphere: "体积雾，雨夜反射，潮湿地面"
+    composition:
+      shot_size: "中景"
+      angle: "平视"
+      rule: "三分法"
+    color:
+      dominant_hue: "青色"
+      complementary: "洋红"
+      hex_codes: ["#00FFFF", "#FF00FF", "#0A0A0A"]
+      film_stock: null
+    narrative: "在霓虹闪烁的雨夜街头，雨水在金属表面反射出迷幻光芒"
+
+  胶片复古:
+    photo:
+      focal_length: "50mm"
+      aperture: "f/2.0"
+      color_temperature: 3200
+      film_grain: "Kodak Portra 400"
+    lighting:
+      direction: "柔和侧光"
+      quality: "软"
+      key_light: "午后窗光"
+      fill_light: "白色反光板"
+      rim_light: null
+      atmosphere: "轻微漏光，柔和边缘"
+    composition:
+      shot_size: "中景"
+      angle: "平视"
+      rule: "三分法"
+    color:
+      dominant_hue: "暖黄"
+      complementary: "淡青"
+      hex_codes: ["#D4A574", "#8B9A7C"]
+      film_stock: "Portra 400"
+    narrative: "在午后暖阳中，时光仿佛倒流回1990年代的某个慵懒下午"
+
+  电影感:
+    photo:
+      focal_length: "85mm"
+      aperture: "f/1.8"
+      color_temperature: 4500
+      film_grain: "Kodak Vision3 500T"
+    lighting:
+      direction: "逆光"
+      quality: "软"
+      key_light: "自然光"
+      fill_light: "柔光箱"
+      rim_light: "金色轮廓光"
+      atmosphere: "电影级光晕，浅景深，散景"
+    composition:
+      shot_size: "特写"
+      angle: "平视"
+      rule: "中心构图"
+    color:
+      dominant_hue: "青橙"
+      complementary: "互补"
+      hex_codes: ["#2E5C6E", "#E8913A"]
+      film_stock: "Cinestill 800T"
+    narrative: "在电影镜头中，每一帧都像是从大银幕上截取的经典瞬间"
+
+  动漫:
+    photo:
+      focal_length: null
+      aperture: null
+      color_temperature: null
+      film_grain: null
+    lighting:
+      direction: "顶光"
+      quality: "硬"
+      key_light: "主光源"
+      fill_light: "反射光"
+      rim_light: "高光边"
+      atmosphere: "赛璐珞质感，高光反射，速度线"
+    composition:
+      shot_size: "中景"
+      angle: "动态角度"
+      rule: "对角线构图"
+    color:
+      dominant_hue: "高饱和"
+      complementary: "对比色"
+      hex_codes: null
+      film_stock: null
+    narrative: "在充满张力的构图中，线条锐利，色彩鲜明，充满青春活力"
+
+  写实肖像:
+    photo:
+      focal_length: "85mm"
+      aperture: "f/1.4"
+      color_temperature: 5600
+      film_grain: null
+    lighting:
+      direction: "蝴蝶光"
+      quality: "软"
+      key_light: "上方45度主光"
+      fill_light: "下方反光板"
+      rim_light: null
+      atmosphere: "自然皮肤质感，毛孔可见"
+    composition:
+      shot_size: "特写"
+      angle: "平视"
+      rule: "三分法"
+    color:
+      dominant_hue: "自然肤色"
+      complementary: null
+      hex_codes: null
+      film_stock: null
+    narrative: "在最真实的光影下，每一个毛孔都诉说着独特的故事"
+
+  暗黑奇幻:
+    photo:
+      focal_length: "24mm"
+      aperture: "f/2.8"
+      color_temperature: 3200
+      film_grain: null
+    lighting:
+      direction: "底光"
+      quality: "硬"
+      key_light: "火焰"
+      fill_light: "环境反射"
+      rim_light: "冷色边缘光"
+      atmosphere: "烟雾，尘埃粒子，丁达尔效应"
+    composition:
+      shot_size: "全景"
+      angle: "低角度仰拍"
+      rule: "对称构图"
+    color:
+      dominant_hue: "暗红"
+      complementary: "冷蓝"
+      hex_codes: ["#4A0000", "#1A1A2E"]
+      film_stock: null
+    narrative: "在黑暗与火焰交织的世界中，史诗般的命运正在展开"
+
+  日系清新:
+    photo:
+      focal_length: "35mm"
+      aperture: "f/2.0"
+      color_temperature: 6500
+      film_grain: null
+    lighting:
+      direction: "漫射光"
+      quality: "软"
+      key_light: "阴天自然光"
+      fill_light: "白色环境反射"
+      rim_light: null
+      atmosphere: "过曝1档，空气感，通透"
+    composition:
+      shot_size: "中景"
+      angle: "平视"
+      rule: "留白构图"
+    color:
+      dominant_hue: "淡蓝"
+      complementary: "米白"
+      hex_codes: ["#E8F4F8", "#FFF8F0"]
+      film_stock: null
+    narrative: "在清新的日常中，捕捉到一丝不经意的温柔"
+
+# 构图映射（从用户描述推断）
+compositions:
+  头像:
+    shot_size: "特写"
+    angle: "平视"
+    rule: "三分法"
+  半身:
+    shot_size: "中景"
+    angle: "平视"
+    rule: "三分法"
+  全身:
+    shot_size: "全景"
+    angle: "平视"
+    rule: "对称构图"
+  海报:
+    shot_size: "中景"
+    angle: "仰视"
+    rule: "中心构图"
+  风景:
+    shot_size: "全景"
+    angle: "俯视"
+    rule: "引导线构图"
+  微距:
+    shot_size: "特写"
+    angle: "平视"
+    rule: "中心构图"
+  航拍:
+    shot_size: "全景"
+    angle: "俯视"
+    rule: "对称构图"
