@@ -12,6 +12,8 @@ from ..agents.fusion import FusionAgent
 from ..agents.selector import SelectorAgent
 from ..agents.generator import GeneratorAgent
 from ..memory.session_memory import SessionMemory
+from ..database.connection import SessionLocal  # ← 新增
+from ..services.prompt_auditor import auditor, AuditResult
 
 
 
@@ -46,12 +48,13 @@ class GraphState(TypedDict):
     expert_outputs: Annotated[List[Dict[str, Any]], merge_expert_outputs]
     fused_intent: Optional[IntentRepresentation]
     selected_model: Optional[str]
-    final_prompt: Optional[str]           # ← 新增：PromptEngineer 输出的提示词
-    prompt_meta: Optional[Dict]           # ← 新增：提示词元数据（创作回放用）
+    final_prompt: Optional[str]
+    prompt_meta: Optional[Dict]
     final_output: Optional[str]
     error: Annotated[Optional[str], merge_errors]
-    mode: Optional[str]  # normal | incremental | clarification
+    mode: Optional[str]
     questions: Optional[List[str]]
+    audit_result: Optional[Dict]
 
 
 # 初始化智能体
@@ -60,10 +63,99 @@ vision_expert = VisionExpert()
 style_expert = StyleExpert()
 mood_expert = MoodExpert()
 fusion_agent = FusionAgent()
-selector = SelectorAgent()
-prompt_engineer = PromptEngineer()      # ← 新增
+prompt_engineer = PromptEngineer()
 generator = GeneratorAgent()
 
+
+def node_auditor(state: GraphState) -> Dict[str, Any]:
+    """提示词审查节点"""
+    if state.get("mode") == "clarification" or not state.get("final_prompt"):
+        print(f"\n🔍 [PromptAuditor] 跳过审查")
+        return {"audit_result": None}
+
+    print(f"\n🔍 [PromptAuditor] 审查提示词...")
+
+    prompt = state["final_prompt"]
+    result = auditor.audit(prompt)
+
+    print(f"   结果: {'✅ 通过' if result.passed else '❌ 拦截'}")
+    print(f"   评分: {result.risk_score}/100")
+    if result.risk_type:
+        print(f"   类型: {result.risk_type}")
+    if result.blocked_keywords:
+        print(f"   命中: {', '.join(result.blocked_keywords)}")
+
+    if not result.passed:
+        return {
+            "error": f"提示词审查未通过: {result.message}",
+            "audit_result": {
+                "passed": False,
+                "result_code": result.result_code,
+                "risk_score": result.risk_score,
+                "risk_type": result.risk_type,
+                "blocked_keywords": result.blocked_keywords,
+                "message": result.message
+            }
+        }
+
+    # 通过：使用处理后的提示词（可能清洗过）
+    return {
+        "final_prompt": result.processed_prompt,  # 更新为清洗后的版本
+        "audit_result": {
+            "passed": True,
+            "result_code": result.result_code,
+            "risk_score": result.risk_score,
+            "risk_type": result.risk_type,
+            "message": result.message
+        }
+    }
+
+
+def node_generator(state: GraphState) -> Dict[str, Any]:
+    """生成节点"""
+    if state.get("mode") == "clarification" or not state.get("fused_intent"):
+        print(f"\n🖼️  [GeneratorAgent] 澄清模式，跳过生成")
+        return {"final_output": None}
+
+    if not state.get("selected_model"):
+        return {"error": "未选择生成模型"}
+
+    if not state.get("final_prompt"):
+        return {"error": "未生成提示词"}
+
+    # 检查审查结果
+    audit = state.get("audit_result")
+    if audit and not audit.get("passed", True):
+        return {"error": f"提示词审查未通过: {audit.get('message')}"}
+
+    print(f"\n🖼️  [GeneratorAgent] 生成图像...")
+
+    try:
+        intent = state["fused_intent"]
+        image_url = generator.generate(
+            prompt=state["final_prompt"],
+            model=state["selected_model"],
+            aspect_ratio=intent.output.aspect_ratio
+        )
+        print(f"   ✅ 完成:")
+        print(f"      {image_url}")
+
+        # 保存到会话记忆
+        session_id = state.get("session_id", "default")
+        memory = get_or_create_memory(session_id)
+        memory.add_record(
+            user_input=state["user_input"],
+            intent=intent,
+            image_url=image_url
+        )
+        print(f"   💾 已保存到会话记忆")
+
+        return {"final_output": image_url}
+    except Exception as e:
+        print(f"   ❌ 错误: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"error": str(e)}
 
 def node_scheduler(state: GraphState) -> Dict[str, Any]:
     """调度节点"""
@@ -72,18 +164,15 @@ def node_scheduler(state: GraphState) -> Dict[str, Any]:
     print(f"{'=' * 60}")
     print(f"   用户输入: {state['user_input'][:60]}...")
 
-    # 提取图片路径
     image_path, message = scheduler.extract_image_path(state["user_input"])
     has_image = image_path is not None
 
     print(f"   图片路径: {image_path}")
     print(f"   提取消息: {message[:60]}...")
 
-    # 获取会话记忆
     session_id = state.get("session_id", "default")
     memory = get_or_create_memory(session_id)
 
-    # 检查是否是增量请求
     is_incremental = memory.is_incremental_request(message)
     if is_incremental and memory.get_last_intent():
         print(f"   📈 检测到增量请求，基于上一次意图修改")
@@ -95,7 +184,6 @@ def node_scheduler(state: GraphState) -> Dict[str, Any]:
             "questions": None
         }
 
-    # 检查意图是否模糊
     is_ambiguous = memory.is_ambiguous(message)
     if is_ambiguous:
         print(f"   ❓ 意图模糊，需要追问")
@@ -107,10 +195,9 @@ def node_scheduler(state: GraphState) -> Dict[str, Any]:
             "user_input": message,
             "mode": "clarification",
             "questions": questions,
-            "scheduled_experts": []  # 不调度任何专家
+            "scheduled_experts": []
         }
 
-    # 正常调度
     schedule_result = scheduler.schedule(message, has_image)
     experts = schedule_result.get("experts", [])
 
@@ -190,7 +277,6 @@ def node_fusion(state: GraphState) -> Dict[str, Any]:
     """融合节点"""
     print(f"\n🔮 [FusionAgent] 融合专家输出...")
 
-    # 如果是澄清模式，跳过融合
     if state.get("mode") == "clarification":
         print(f"   ⏭️  澄清模式，跳过融合")
         return {"fused_intent": None}
@@ -198,7 +284,6 @@ def node_fusion(state: GraphState) -> Dict[str, Any]:
     session_id = state.get("session_id", "default")
     memory = get_or_create_memory(session_id)
 
-    # 增量更新模式
     if state.get("mode") == "incremental":
         print(f"   📈 增量更新模式")
         last_intent = memory.get_last_intent()
@@ -209,7 +294,6 @@ def node_fusion(state: GraphState) -> Dict[str, Any]:
         else:
             print(f"   ⚠️  无历史记录，回退到正常模式")
 
-    # 正常融合模式
     print(f"   收到 {len(state.get('expert_outputs', []))} 个专家输出")
 
     try:
@@ -223,9 +307,8 @@ def node_fusion(state: GraphState) -> Dict[str, Any]:
         return {"error": str(e)}
 
 
-def node_selector(state: GraphState) -> Dict[str, Any]:
+def node_selector(state: GraphState, db=None) -> Dict[str, Any]:
     """选择节点"""
-    # 如果是澄清模式或无融合意图，跳过
     if state.get("mode") == "clarification" or not state.get("fused_intent"):
         print(f"\n🎯 [SelectorAgent] 澄清模式，跳过选择")
         return {"selected_model": None}
@@ -233,6 +316,8 @@ def node_selector(state: GraphState) -> Dict[str, Any]:
     print(f"\n🎯 [SelectorAgent] 选择生成模型...")
 
     try:
+        # ← 修改：传入 db 参数
+        selector = SelectorAgent(db=db)
         result = selector.select(state["fused_intent"])
         print(f"   ✅ 选择: {result['model_name']}")
         return {"selected_model": result["selected_model"]}
@@ -243,7 +328,6 @@ def node_selector(state: GraphState) -> Dict[str, Any]:
 
 def node_prompt_engineer(state: GraphState) -> Dict[str, Any]:
     """提示词工程师节点"""
-    # 如果是澄清模式或无融合意图，跳过
     if state.get("mode") == "clarification" or not state.get("fused_intent"):
         print(f"\n✍️  [PromptEngineer] 澄清模式，跳过")
         return {"final_prompt": None, "prompt_meta": None}
@@ -298,7 +382,6 @@ def node_prompt_engineer(state: GraphState) -> Dict[str, Any]:
 
 def node_generator(state: GraphState) -> Dict[str, Any]:
     """生成节点"""
-    # 如果是澄清模式或无融合意图，跳过生成
     if state.get("mode") == "clarification" or not state.get("fused_intent"):
         print(f"\n🖼️  [GeneratorAgent] 澄清模式，跳过生成")
         return {"final_output": None}
@@ -349,24 +432,36 @@ def create_workflow():
     workflow.add_node("style_expert", node_style)
     workflow.add_node("mood_expert", node_mood)
     workflow.add_node("fusion", node_fusion)
-    workflow.add_node("selector", node_selector)
-    workflow.add_node("prompt_engineer", node_prompt_engineer)  # ← 新增
+    workflow.add_node("prompt_engineer", node_prompt_engineer)
+    workflow.add_node("auditor", node_auditor)      # ← 新增：注册 auditor 节点
     workflow.add_node("generator", node_generator)
+
+    # selector 节点：尝试连接数据库
+    db = None
+    try:
+        from sqlalchemy import text
+        db = SessionLocal()
+        db.execute(text("SELECT 1"))
+        print("✅ 数据库连接成功，Selector 使用动态评分")
+    except Exception as e:
+        print(f"⚠️  数据库未连接: {e}，Selector 使用 fallback 模式")
+
+    def selector_with_db(state: GraphState) -> Dict[str, Any]:
+        return node_selector(state, db=db)
+
+    workflow.add_node("selector", selector_with_db)
 
     # 添加边
     workflow.set_entry_point("scheduler")
 
-    # 从 scheduler 分发到各专家（并行）
     workflow.add_edge("scheduler", "vision_expert")
     workflow.add_edge("scheduler", "style_expert")
     workflow.add_edge("scheduler", "mood_expert")
 
-    # 专家汇聚到 fusion
     workflow.add_edge("vision_expert", "fusion")
     workflow.add_edge("style_expert", "fusion")
     workflow.add_edge("mood_expert", "fusion")
 
-    # fusion 后条件分支
     def after_fusion(state: GraphState) -> str:
         if state.get("mode") == "clarification":
             return "end"
@@ -381,12 +476,21 @@ def create_workflow():
         }
     )
 
-    # selector → prompt_engineer → generator
-    workflow.add_edge("selector", "prompt_engineer")   # ← 新增
-    workflow.add_edge("prompt_engineer", "generator")  # ← 新增
+    workflow.add_edge("selector", "prompt_engineer")
+    workflow.add_edge("prompt_engineer", "auditor")   # ← 修改：只保留 auditor 路径
+    workflow.add_edge("auditor", "generator")
     workflow.add_edge("generator", END)
 
-    return workflow.compile()
+    compiled = workflow.compile()
+
+    import atexit
+    def cleanup():
+        if db:
+            db.close()
+            print("💾 数据库连接已关闭")
+    atexit.register(cleanup)
+
+    return compiled
 
 
 # 全局编译

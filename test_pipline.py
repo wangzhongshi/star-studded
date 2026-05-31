@@ -1,9 +1,10 @@
 import os
 import sys
 
-os.environ["DEEPSEEK_API_KEY"] = "sk-3469d80c6e5f4c7682c4999a6cb3ec55"
-os.environ["DASHSCOPE_API_KEY"] = "sk-e1bab9a94bd8442cb1378b1ded94a4e5"
-os.environ["ARK_API_KEY"] = "ark-83646a6c-1326-4717-8f1a-c3ff51b47a82-a8c57"
+
+os.environ["DEEPSEEK_API_KEY"] = "your-api-key"
+os.environ["DASHSCOPE_API_KEY"] = "your-api-key"
+os.environ["ARK_API_KEY"] = "your-api-key"
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
