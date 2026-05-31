@@ -7,13 +7,11 @@ from ..agents.scheduler import SchedulerAgent
 from ..agents.experts.vision_expert import VisionExpert
 from ..agents.experts.style_expert import StyleExpert
 from ..agents.experts.mood_expert import MoodExpert
+from ..agents.experts.prompt_engineer import PromptEngineer
 from ..agents.fusion import FusionAgent
 from ..agents.selector import SelectorAgent
 from ..agents.generator import GeneratorAgent
 from ..memory.session_memory import SessionMemory
-import re
-
-
 
 
 
@@ -48,6 +46,8 @@ class GraphState(TypedDict):
     expert_outputs: Annotated[List[Dict[str, Any]], merge_expert_outputs]
     fused_intent: Optional[IntentRepresentation]
     selected_model: Optional[str]
+    final_prompt: Optional[str]           # ← 新增：PromptEngineer 输出的提示词
+    prompt_meta: Optional[Dict]           # ← 新增：提示词元数据（创作回放用）
     final_output: Optional[str]
     error: Annotated[Optional[str], merge_errors]
     mode: Optional[str]  # normal | incremental | clarification
@@ -61,6 +61,7 @@ style_expert = StyleExpert()
 mood_expert = MoodExpert()
 fusion_agent = FusionAgent()
 selector = SelectorAgent()
+prompt_engineer = PromptEngineer()      # ← 新增
 generator = GeneratorAgent()
 
 
@@ -124,6 +125,7 @@ def node_scheduler(state: GraphState) -> Dict[str, Any]:
         "questions": None
     }
 
+
 def node_vision(state: GraphState) -> Dict[str, Any]:
     """视觉专家节点"""
     if "vision" not in state.get("scheduled_experts", []):
@@ -183,14 +185,6 @@ def node_mood(state: GraphState) -> Dict[str, Any]:
         print(f"   ❌ 错误: {e}")
         return {"error": str(e), "expert_outputs": []}
 
-def should_continue(state: GraphState) -> str:
-    """判断是否有错误"""
-    if state.get("error"):
-        return "error"
-    return "continue"
-
-
-# 构建图
 
 def node_fusion(state: GraphState) -> Dict[str, Any]:
     """融合节点"""
@@ -247,6 +241,61 @@ def node_selector(state: GraphState) -> Dict[str, Any]:
         return {"error": str(e)}
 
 
+def node_prompt_engineer(state: GraphState) -> Dict[str, Any]:
+    """提示词工程师节点"""
+    # 如果是澄清模式或无融合意图，跳过
+    if state.get("mode") == "clarification" or not state.get("fused_intent"):
+        print(f"\n✍️  [PromptEngineer] 澄清模式，跳过")
+        return {"final_prompt": None, "prompt_meta": None}
+
+    print(f"\n✍️  [PromptEngineer] 设计专业提示词...")
+
+    try:
+        result = prompt_engineer.design(state["fused_intent"])
+        prompt = result["prompt"]
+        meta = result["meta"]
+
+        print(f"   ✅ 完成")
+        print(f"   📷 摄影: {meta.photo.focal_length or 'N/A'}, {meta.photo.aperture or 'N/A'}")
+        print(f"   💡 光影: {meta.lighting.direction or 'N/A'}")
+        print(f"   🎨 色彩: {meta.color.dominant_hue or 'N/A'}")
+        print(f"   📝 提示词: {prompt[:80]}...")
+
+        return {
+            "final_prompt": prompt,
+            "prompt_meta": {
+                "photo": {
+                    "focal_length": meta.photo.focal_length,
+                    "aperture": meta.photo.aperture,
+                    "color_temperature": meta.photo.color_temperature,
+                    "film_grain": meta.photo.film_grain
+                },
+                "lighting": {
+                    "direction": meta.lighting.direction,
+                    "quality": meta.lighting.quality,
+                    "atmosphere": meta.lighting.atmosphere
+                },
+                "composition": {
+                    "shot_size": meta.composition.shot_size,
+                    "angle": meta.composition.angle,
+                    "rule": meta.composition.rule
+                },
+                "color": {
+                    "dominant_hue": meta.color.dominant_hue,
+                    "complementary": meta.color.complementary,
+                    "hex_codes": meta.color.hex_codes,
+                    "film_stock": meta.color.film_stock
+                },
+                "narrative": meta.narrative
+            }
+        }
+    except Exception as e:
+        print(f"   ❌ 错误: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"error": str(e)}
+
+
 def node_generator(state: GraphState) -> Dict[str, Any]:
     """生成节点"""
     # 如果是澄清模式或无融合意图，跳过生成
@@ -257,12 +306,17 @@ def node_generator(state: GraphState) -> Dict[str, Any]:
     if not state.get("selected_model"):
         return {"error": "未选择生成模型"}
 
+    if not state.get("final_prompt"):
+        return {"error": "未生成提示词"}
+
     print(f"\n🖼️  [GeneratorAgent] 生成图像...")
 
     try:
+        intent = state["fused_intent"]
         image_url = generator.generate(
-            state["fused_intent"],
-            state["selected_model"]
+            prompt=state["final_prompt"],
+            model=state["selected_model"],
+            aspect_ratio=intent.output.aspect_ratio
         )
         print(f"   ✅ 完成:")
         print(f"      {image_url}")
@@ -272,7 +326,7 @@ def node_generator(state: GraphState) -> Dict[str, Any]:
         memory = get_or_create_memory(session_id)
         memory.add_record(
             user_input=state["user_input"],
-            intent=state["fused_intent"],
+            intent=intent,
             image_url=image_url
         )
         print(f"   💾 已保存到会话记忆")
@@ -296,6 +350,7 @@ def create_workflow():
     workflow.add_node("mood_expert", node_mood)
     workflow.add_node("fusion", node_fusion)
     workflow.add_node("selector", node_selector)
+    workflow.add_node("prompt_engineer", node_prompt_engineer)  # ← 新增
     workflow.add_node("generator", node_generator)
 
     # 添加边
@@ -314,7 +369,7 @@ def create_workflow():
     # fusion 后条件分支
     def after_fusion(state: GraphState) -> str:
         if state.get("mode") == "clarification":
-            return "end"  # 澄清模式直接结束
+            return "end"
         return "continue"
 
     workflow.add_conditional_edges(
@@ -326,7 +381,9 @@ def create_workflow():
         }
     )
 
-    workflow.add_edge("selector", "generator")
+    # selector → prompt_engineer → generator
+    workflow.add_edge("selector", "prompt_engineer")   # ← 新增
+    workflow.add_edge("prompt_engineer", "generator")  # ← 新增
     workflow.add_edge("generator", END)
 
     return workflow.compile()
@@ -334,4 +391,3 @@ def create_workflow():
 
 # 全局编译
 app = create_workflow()
-

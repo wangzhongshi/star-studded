@@ -1,4 +1,4 @@
-from typing import Type
+from typing import Type, Optional
 from langchain.tools import BaseTool
 from pydantic import BaseModel, Field
 
@@ -9,7 +9,9 @@ from ...models.intent import IntentRepresentation
 
 
 class SeedreamInput(BaseModel):
-    intent_json: str = Field(description="JSON格式的IntentRepresentation")
+    prompt: str = Field(description="专业提示词", default="")
+    intent_json: str = Field(description="JSON格式的IntentRepresentation（fallback）", default="")
+    aspect_ratio: str = Field(description="画幅比例", default="1:1")
 
 
 class SeedreamGenerator(BaseGenerator, BaseTool):
@@ -18,7 +20,7 @@ class SeedreamGenerator(BaseGenerator, BaseTool):
     name: str = "seedream_generator"
     description: str = (
         "调用豆包Seedream-5.0生成高质量图像。 "
-        "输入：JSON格式的IntentRepresentation。 "
+        "输入：专业提示词（优先）或 JSON格式的IntentRepresentation（fallback）。 "
         "输出：生成图像的URL。"
     )
     args_schema: Type[BaseModel] = SeedreamInput
@@ -28,6 +30,10 @@ class SeedreamGenerator(BaseGenerator, BaseTool):
         return ["photo_realistic", "high_detail", "chinese_prompt", "fast"]
 
     def translate(self, intent: IntentRepresentation) -> str:
+        """
+        原始提示词拼接逻辑（fallback 用）
+        PromptEngineer 挂了的时候用这个
+        """
         parts = []
 
         # 主体
@@ -75,16 +81,37 @@ class SeedreamGenerator(BaseGenerator, BaseTool):
         }
         return ratio_map.get(aspect_ratio, "1920x1920")
 
-    def generate(self, intent: IntentRepresentation) -> str:
-        prompt = self.translate(intent)
-        size = self.get_size(intent.output.aspect_ratio)
+    def generate(
+        self,
+        prompt: Optional[str] = None,
+        intent: Optional[IntentRepresentation] = None,
+        aspect_ratio: str = "1:1"
+    ) -> str:
+        """
+        生成图像
+        Args:
+            prompt: PromptEngineer 设计好的专业提示词（优先）
+            intent: IntentRepresentation（fallback，用内部 translate 拼接）
+            aspect_ratio: 画幅比例
+        """
+        # 优先用 PromptEngineer 的提示词
+        if prompt:
+            final_prompt = prompt
+            print(f"   📝 使用 PromptEngineer 提示词: {prompt[:100]}...")
+        elif intent:
+            final_prompt = self.translate(intent)
+            print(f"   📝 使用 fallback 提示词: {final_prompt[:100]}...")
+        else:
+            raise ValueError("必须提供 prompt 或 intent")
+
+        size = self.get_size(aspect_ratio)
 
         client = doubao_client
         model = settings.DOUBAO.model_id
 
         response = client.images.generate(
             model=model,
-            prompt=prompt,
+            prompt=final_prompt,
             size=size,
             response_format="url",
             extra_body={"watermark": False}
@@ -92,10 +119,15 @@ class SeedreamGenerator(BaseGenerator, BaseTool):
 
         return response.data[0].url
 
-    def _run(self, intent_json: str) -> str:
+    def _run(self, prompt: str = "", intent_json: str = "", aspect_ratio: str = "1:1") -> str:
         """LangChain Tool 接口"""
-        intent = IntentRepresentation.from_dict(__import__('json').loads(intent_json))
-        return self.generate(intent)
+        if prompt:
+            return self.generate(prompt=prompt, aspect_ratio=aspect_ratio)
+        elif intent_json:
+            intent = IntentRepresentation.from_dict(__import__('json').loads(intent_json))
+            return self.generate(intent=intent, aspect_ratio=aspect_ratio)
+        else:
+            raise ValueError("必须提供 prompt 或 intent_json")
 
     async def _arun(self, *args, **kwargs):
         raise NotImplementedError

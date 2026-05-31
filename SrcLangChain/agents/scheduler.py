@@ -1,8 +1,33 @@
 import json
 import re
+import time
 from typing import List, Dict, Any, Optional
 from ..services.llm_client import deepseek_client
 from ..config.settings import settings
+
+
+def retry_on_json_error(max_retries=2, delay=1):
+    """装饰器：JSON 解析失败时重试"""
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            for attempt in range(max_retries + 1):
+                try:
+                    return func(*args, **kwargs)
+                except json.JSONDecodeError as e:
+                    if attempt < max_retries:
+                        print(f"   ⚠️  JSON 解析失败，第 {attempt + 1} 次重试...")
+                        time.sleep(delay)
+                    else:
+                        print(f"   ❌ 重试 {max_retries} 次后仍失败，返回默认调度")
+                        # 兜底：返回默认调度
+                        return {
+                            "experts": ["style", "mood"],
+                            "reasoning": "DeepSeek 返回异常，fallback 到默认调度",
+                            "mode": "normal"
+                        }
+            return None  # 理论上不会走到这里
+        return wrapper
+    return decorator
 
 
 class SchedulerAgent:
@@ -16,6 +41,7 @@ class SchedulerAgent:
         self.client = deepseek_client
         self.model = settings.DEEPSEEK.model_id
 
+    @retry_on_json_error(max_retries=2, delay=1)
     def schedule(self, user_input: str, has_image: bool,
                  is_incremental: bool = False,
                  is_ambiguous: bool = False) -> Dict[str, Any]:
@@ -49,13 +75,15 @@ class SchedulerAgent:
 - 如果用户提到情绪（如"温馨""悲伤""酷"），调用 mood
 - 至少调用一个专家
 
+重要：你的输出必须是JSON格式。
+
 输出JSON格式：
 {
     "experts": ["vision", "style", "mood"],
     "reasoning": "调度理由"
 }"""
 
-        user_prompt = f"用户输入: {user_input}\n是否上传图片: {has_image}\n\n请决定调用哪些专家。"
+        user_prompt = f"用户输入: {user_input}\n是否上传图片: {has_image}\n\n请决定调用哪些专家。重要：你的输出必须是JSON格式。"
 
         response = self.client.chat.completions.create(
             model=self.model,
@@ -67,8 +95,16 @@ class SchedulerAgent:
             temperature=0.3
         )
 
-        result = json.loads(response.choices[0].message.content)
+        raw = response.choices[0].message.content
+        print(f"   [DEBUG] Raw response: {raw!r}")
+
+        # 空内容检查
+        if not raw or not raw.strip():
+            raise json.JSONDecodeError("Empty response", "", 0)
+
+        result = json.loads(raw)
         result["mode"] = "normal"
+
         return result
 
     def extract_image_path(self, user_input: str) -> tuple:
