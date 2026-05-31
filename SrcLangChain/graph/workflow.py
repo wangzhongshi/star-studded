@@ -157,8 +157,9 @@ def node_generator(state: GraphState) -> Dict[str, Any]:
         traceback.print_exc()
         return {"error": str(e)}
 
+
 def node_scheduler(state: GraphState) -> Dict[str, Any]:
-    """调度节点"""
+    """调度节点（支持多轮追问）"""
     print(f"\n{'=' * 60}")
     print(f"🔀 [Scheduler] 分析用户需求")
     print(f"{'=' * 60}")
@@ -173,6 +174,7 @@ def node_scheduler(state: GraphState) -> Dict[str, Any]:
     session_id = state.get("session_id", "default")
     memory = get_or_create_memory(session_id)
 
+    # 检查是否是增量请求
     is_incremental = memory.is_incremental_request(message)
     if is_incremental and memory.get_last_intent():
         print(f"   📈 检测到增量请求，基于上一次意图修改")
@@ -184,11 +186,33 @@ def node_scheduler(state: GraphState) -> Dict[str, Any]:
             "questions": None
         }
 
-    is_ambiguous = memory.is_ambiguous(message)
+    # 检查意图是否模糊（结合历史追问次数）
+    # 如果有历史追问记录，合并输入后再判断
+    combined_input = message
+    if memory.history and memory.clarification_rounds > 0:
+        combined_input = memory.get_combined_input() + "；" + message
+        print(f"   📝 合并历史输入: {combined_input[:80]}...")
+
+    is_ambiguous = scheduler.is_ambiguous(combined_input)
+
+    # 如果已经追问过，且当前输入是补充，尝试直接生成
+    if memory.clarification_rounds > 0 and len(message) > 3:
+        # 用户补充了信息，检查是否足够
+        missing = scheduler.analyze_missing_info(combined_input)
+        if len(missing) < 2:  # 缺失信息少于2项，可以生成
+            is_ambiguous = False
+            print(f"   ✅ 补充后信息足够，直接生成")
+
     if is_ambiguous:
-        print(f"   ❓ 意图模糊，需要追问")
-        questions = memory.generate_follow_up_questions(message)
+        print(f"   ❓ 意图模糊，需要追问（第 {memory.clarification_rounds + 1} 轮）")
+
+        # 记录追问
+        memory.add_record(message, is_clarification=True)
+
+        # 生成追问提示
+        questions = memory.generate_follow_up_questions(combined_input)
         print(f"   追问: {questions}")
+
         return {
             "image_path": image_path,
             "has_image": has_image,
@@ -198,6 +222,7 @@ def node_scheduler(state: GraphState) -> Dict[str, Any]:
             "scheduled_experts": []
         }
 
+    # 正常调度
     schedule_result = scheduler.schedule(message, has_image)
     experts = schedule_result.get("experts", [])
 
@@ -206,7 +231,7 @@ def node_scheduler(state: GraphState) -> Dict[str, Any]:
     return {
         "image_path": image_path,
         "has_image": has_image,
-        "user_input": message,
+        "user_input": combined_input if memory.clarification_rounds > 0 else message,
         "scheduled_experts": experts,
         "mode": "normal",
         "questions": None

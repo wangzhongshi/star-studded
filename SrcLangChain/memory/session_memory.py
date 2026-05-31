@@ -1,172 +1,116 @@
-from typing import Dict, List, Optional
+from typing import List, Dict, Optional, Any
 from dataclasses import dataclass, field
 from datetime import datetime
-import json
-
 from ..models.intent import IntentRepresentation
 
 
 @dataclass
 class SessionRecord:
-    """单次交互记录"""
-    timestamp: str
+    """单条会话记录"""
     user_input: str
-    intent: IntentRepresentation
-    image_url: str
-    feedback: Optional[str] = None
+    intent: Optional[IntentRepresentation] = None
+    image_url: Optional[str] = None
+    timestamp: datetime = field(default_factory=datetime.now)
+    is_clarification: bool = False  # 是否是追问轮次
 
 
 class SessionMemory:
-    """会话记忆管理"""
+    """
+    会话记忆
+    支持：增量更新、多轮追问、意图历史
+    """
 
-    def __init__(self, session_id: str = "default"):
+    def __init__(self, session_id: str):
         self.session_id = session_id
         self.history: List[SessionRecord] = []
-        self.current_context: Dict = {}
+        self.clarification_rounds: int = 0  # 追问轮次计数
+        self.pending_intent: Optional[Dict[str, Any]] = None  # 待补充的意图片段
+        self.max_clarification_rounds: int = 3  # 最大追问轮次
 
-    def add_record(self, user_input: str, intent: IntentRepresentation,
-                   image_url: str, feedback: Optional[str] = None):
+    def add_record(self, user_input: str, intent: IntentRepresentation = None,
+                   image_url: str = None, is_clarification: bool = False):
         """添加记录"""
         record = SessionRecord(
-            timestamp=datetime.now().isoformat(),
             user_input=user_input,
             intent=intent,
             image_url=image_url,
-            feedback=feedback
+            is_clarification=is_clarification
         )
         self.history.append(record)
-        self.current_context = {
-            "last_intent": intent.to_dict(),
-            "last_image": image_url,
-            "last_input": user_input
-        }
+
+        if is_clarification:
+            self.clarification_rounds += 1
 
     def get_last_intent(self) -> Optional[IntentRepresentation]:
-        """获取上一次意图"""
-        if not self.history:
-            return None
-        return self.history[-1].intent
+        """获取最后一次完整意图"""
+        for record in reversed(self.history):
+            if record.intent is not None:
+                return record.intent
+        return None
 
-    def get_context_summary(self) -> str:
-        """获取上下文摘要"""
-        if not self.history:
-            return ""
+    def get_combined_input(self) -> str:
+        """
+        获取组合后的用户输入（包含追问补充）
+        用于 Fusion 时整合多轮输入
+        """
+        # 过滤出非追问或包含有效信息的记录
+        inputs = []
+        for record in self.history:
+            if not record.is_clarification or len(record.user_input) > 3:
+                inputs.append(record.user_input)
 
-        last = self.history[-1]
-        return f"""
-上一次创作：
-- 主题：{last.intent.subject.entity}
-- 风格：{last.intent.style.genre}
-- 情绪：{last.intent.style.mood}
-- 强度：{last.intent.style.intensity}
-- 用户反馈：{last.feedback or '无'}
-"""
+        return "；".join(inputs)
 
     def is_incremental_request(self, user_input: str) -> bool:
-        """判断是否是增量请求"""
+        """检测是否是增量请求"""
         incremental_keywords = [
-            "再", "更", "稍微", "有点", "太", "不够",
-            "酷一点", "暗一点", "亮一点", "换", "改",
-            "像", "类似", "参考", "按照这个", "基于"
+            "再", "更", "加", "换", "改", "变", "调整", "修改",
+            "酷一点", "可爱一点", "亮一点", "暗一点",
+            "换个", "改成", "变成", "不要", "去掉", "增加"
         ]
         return any(kw in user_input for kw in incremental_keywords)
 
     def is_ambiguous(self, user_input: str) -> bool:
-        """判断意图是否模糊"""
-        if len(user_input) < 10:
-            return True
+        """
+        检测意图是否模糊（结合历史追问次数）
 
-        has_subject = any(kw in user_input for kw in ["猫", "狗", "人", "风景", "建筑", "车", "花", "山", "海"])
-        has_style = any(kw in user_input for kw in ["风格", "赛博朋克", "油画", "卡通", "写实", "动漫", "国风", "水墨"])
+        如果已经追问多次，不再追问，直接生成
+        """
+        # 如果已经追问太多次，不再追问
+        if self.clarification_rounds >= self.max_clarification_rounds:
+            return False
 
-        return not (has_subject or has_style)
+        # 如果历史已经有完整意图，当前输入可能是补充
+        if self.get_last_intent() is not None:
+            return False
+
+        return True  # 由 Scheduler 进一步判断
 
     def generate_follow_up_questions(self, user_input: str) -> List[str]:
-        """生成追问问题"""
-        questions = []
+        """
+        生成追问问题（改为返回追问提示，供前端展示输入框）
 
-        if "画" in user_input and not any(
-                kw in user_input for kw in ["猫", "狗", "人", "风景", "建筑", "车", "花", "山"]):
-            questions.append("你想画什么主题？比如人物、动物、风景？")
+        返回：
+            [追问提示文本] — 单元素列表，前端显示输入框
+        """
+        from ..agents.scheduler import SchedulerAgent
+        scheduler = SchedulerAgent()
 
-        if not any(kw in user_input for kw in
-                   ["风格", "赛博朋克", "油画", "卡通", "写实", "动漫", "国风", "水墨", "二次元"]):
-            questions.append("想要什么风格？比如写实、卡通、赛博朋克、国风？")
+        # 分析缺失信息
+        missing = scheduler.analyze_missing_info(user_input)
 
-        if not any(kw in user_input for kw in ["情绪", "氛围", "感觉", "酷", "温馨", "梦幻", "神秘", "悲伤", "开心"]):
-            questions.append("想要什么样的氛围？比如酷炫、温馨、梦幻、神秘？")
+        # 生成追问提示
+        prompt = scheduler.generate_clarification_prompt(user_input, missing)
 
-        return questions[:2]
+        return [prompt]
 
-    def apply_incremental_update(self, user_input: str,
-                                 last_intent: IntentRepresentation) -> IntentRepresentation:
-        """应用增量更新"""
-        import copy
-        new_intent = copy.deepcopy(last_intent)
+    def can_generate(self) -> bool:
+        """判断是否足够信息生成"""
+        # 有完整意图，或追问次数已达上限
+        return self.get_last_intent() is not None or \
+            self.clarification_rounds >= self.max_clarification_rounds
 
-        # 强度调整
-        if "更酷" in user_input or "酷一点" in user_input or "再酷" in user_input:
-            new_intent.style.intensity = min(1.0, new_intent.style.intensity + 0.2)
-        elif "稍微" in user_input or "有点" in user_input:
-            new_intent.style.intensity = min(1.0, new_intent.style.intensity + 0.1)
-        elif "太" in user_input and ("强" in user_input or "浓" in user_input or "过了" in user_input):
-            new_intent.style.intensity = max(0.0, new_intent.style.intensity - 0.2)
-        elif "淡" in user_input or "轻" in user_input:
-            new_intent.style.intensity = max(0.0, new_intent.style.intensity - 0.1)
-
-        # 风格切换
-        if "换成" in user_input or "改" in user_input or "换成" in user_input:
-            if "动漫" in user_input or "二次元" in user_input or "日漫" in user_input:
-                new_intent.style.genre = "anime"
-                new_intent.style.references = ["宫崎骏", "新海诚"]
-            elif "写实" in user_input or "照片" in user_input:
-                new_intent.style.genre = "realistic"
-            elif "油画" in user_input or "古典" in user_input:
-                new_intent.style.genre = "oil_painting"
-                new_intent.style.references = ["梵高", "莫奈"]
-            elif "国风" in user_input or "水墨" in user_input or "古风" in user_input:
-                new_intent.style.genre = "chinese_ink"
-                new_intent.style.references = ["水墨画", "山水画"]
-            elif "赛博朋克" in user_input:
-                new_intent.style.genre = "cyberpunk"
-                new_intent.style.references = ["银翼杀手", "攻壳机动队"]
-
-        # 情绪调整
-        if "温馨" in user_input or "温暖" in user_input:
-            new_intent.style.mood = "warm"
-        elif "梦幻" in user_input or "唯美" in user_input:
-            new_intent.style.mood = "dreamy"
-        elif "神秘" in user_input or "暗黑" in user_input:
-            new_intent.style.mood = "mysterious"
-        elif "悲伤" in user_input or "忧郁" in user_input:
-            new_intent.style.mood = "melancholic"
-        elif "开心" in user_input or "欢乐" in user_input:
-            new_intent.style.mood = "joyful"
-        elif "酷炫" in user_input or "酷" in user_input:
-            new_intent.style.mood = "cool"
-
-        # 构图调整
-        if "头像" in user_input or "方形" in user_input:
-            new_intent.output.aspect_ratio = "1:1"
-        elif "壁纸" in user_input or "横屏" in user_input or "电脑" in user_input:
-            new_intent.output.aspect_ratio = "16:9"
-        elif "手机" in user_input or "竖屏" in user_input:
-            new_intent.output.aspect_ratio = "9:16"
-
-        # 质量调整
-        if "高清" in user_input or "高质量" in user_input or "超清" in user_input:
-            new_intent.output.quality = "high"
-        elif "草图" in user_input or "预览" in user_input:
-            new_intent.output.quality = "low"
-
-        # 添加约束
-        if "不要" in user_input or "别" in user_input:
-            # 提取不要的内容
-            import re
-            dont_match = re.search(r'不要(.+?)(?:，|。|$)', user_input)
-            if dont_match:
-                avoid_item = dont_match.group(1).strip()
-                if avoid_item not in new_intent.constraints.avoid:
-                    new_intent.constraints.avoid.append(avoid_item)
-
-        return new_intent
+    def reset_clarification(self):
+        """重置追问状态（新会话开始时）"""
+        self.clarification_rounds = 0
+        self.pending_intent = None

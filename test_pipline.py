@@ -8,7 +8,7 @@ os.environ["ARK_API_KEY"] = "your-api-key"
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-from SrcLangChain.agents.orchestrator import create_orchestrator
+from SrcPipline.agents.orchestrator import create_orchestrator
 
 
 def test_text_only():
